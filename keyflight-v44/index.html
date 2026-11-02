@@ -17,7 +17,7 @@
   --ok: #7be495;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #98c4eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif; touch-action: none; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #98c4eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif; touch-action: manipulation; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
 button { font: inherit; touch-action: manipulation; }
 .joystick-base, .throttle-track { touch-action: none; }
 #game, #game canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
@@ -81,6 +81,8 @@ button { font: inherit; touch-action: manipulation; }
   .throttle-knob { top: 40px; }
   .actions { padding-inline: 10px; }
   .drop-btn { min-width: 116px; padding: 14px 12px; }
+  .overlay, .hud-card { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .modal { box-shadow: 0 12px 34px rgba(0,0,0,.28); }
 }
 @media (orientation: portrait) and (max-width: 760px) {
   #controls { grid-template-columns: 1fr 1fr; }
@@ -163,7 +165,7 @@ button { font: inherit; touch-action: manipulation; }
 
   <div id="toast"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="./three.min.js"></script>
   <script>
 if (typeof THREE === 'undefined') {
   document.body.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;padding:28px;background:#0b1020;color:white;font-family:system-ui;text-align:center"><div><h2>遊戲引擎載入失敗</h2><p style="color:#b7c5d8;line-height:1.6">請確認手機有網路連線後重新整理。建議使用最新版 Chrome 或 Safari。</p></div></div>';
@@ -282,6 +284,7 @@ if (typeof THREE === 'undefined') {
     crowSafeUntil: 0,
     soundWaveActive: false,
     soundWaveStart: 0,
+    loading: false,
   };
 
   function createDrone() {
@@ -421,22 +424,33 @@ if (typeof THREE === 'undefined') {
     roof.receiveShadow = true;
     group.add(roof);
 
-    const windowMat = new THREE.MeshStandardMaterial({ color: 0x8cb8cc, roughness: 0.25, metalness: 0.05 });
-    const rawLevels = Math.max(2, Math.floor(h / 3.2));
-    const levels = IS_MOBILE ? Math.min(4, rawLevels) : rawLevels;
-    const levelStep = IS_MOBILE && rawLevels > levels ? (rawLevels / levels) : 1;
-    for (let li = 0; li < levels; li++) {
-      const ly = Math.floor(li * levelStep);
-      const y = 1.7 + ly * 3.1;
-      [-1, 1].forEach(side => {
-        const front = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.2, w * 0.22), 1.1, 0.06), windowMat);
-        front.position.set(side * w * 0.23, y, d / 2 + 0.032);
-        group.add(front);
-        const back = front.clone(); back.position.z = -d / 2 - 0.032; group.add(back);
-        const left = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.1, Math.max(1.2, d * 0.22)), windowMat);
-        left.position.set(w / 2 + 0.032, y, side * d * 0.23); group.add(left);
-        const right = left.clone(); right.position.x = -w / 2 - 0.032; group.add(right);
-      });
+    // 手機版只使用 4 片窗帶，避免每棟大樓建立數十個獨立 Mesh。
+    // 桌機版則保留原本較細緻的樓層窗戶。
+    if (IS_MOBILE) {
+      const windowMat = new THREE.MeshBasicMaterial({ color: 0x8cb8cc });
+      const windowHeight = Math.max(1.8, h * 0.42);
+      const front = new THREE.Mesh(new THREE.BoxGeometry(w * 0.68, windowHeight, 0.035), windowMat);
+      front.position.set(0, h * 0.53, d / 2 + 0.026);
+      group.add(front);
+      const back = front.clone(); back.position.z = -d / 2 - 0.026; group.add(back);
+      const left = new THREE.Mesh(new THREE.BoxGeometry(0.035, windowHeight, d * 0.68), windowMat);
+      left.position.set(w / 2 + 0.026, h * 0.53, 0); group.add(left);
+      const right = left.clone(); right.position.x = -w / 2 - 0.026; group.add(right);
+    } else {
+      const windowMat = new THREE.MeshStandardMaterial({ color: 0x8cb8cc, roughness: 0.25, metalness: 0.05 });
+      const rawLevels = Math.max(2, Math.floor(h / 3.2));
+      for (let li = 0; li < rawLevels; li++) {
+        const y = 1.7 + li * 3.1;
+        [-1, 1].forEach(side => {
+          const front = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.2, w * 0.22), 1.1, 0.06), windowMat);
+          front.position.set(side * w * 0.23, y, d / 2 + 0.032);
+          group.add(front);
+          const back = front.clone(); back.position.z = -d / 2 - 0.032; group.add(back);
+          const left = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.1, Math.max(1.2, d * 0.22)), windowMat);
+          left.position.set(w / 2 + 0.032, y, side * d * 0.23); group.add(left);
+          const right = left.clone(); right.position.x = -w / 2 - 0.032; group.add(right);
+        });
+      }
     }
 
     group.position.set(x, 0, z);
@@ -471,7 +485,7 @@ if (typeof THREE === 'undefined') {
         const nearRoadZ = roadCenters.some(r => Math.abs(cz - r) < 7);
         if (nearRoadX || nearRoadZ) continue;
 
-        const count = Math.random() < 0.25 ? 2 : 1;
+        const count = IS_MOBILE ? 1 : (Math.random() < 0.25 ? 2 : 1);
         for (let n = 0; n < count; n++) {
           const w = rand(8.5, count === 2 ? 10.5 : 13.5);
           const d = rand(8.5, count === 2 ? 10.5 : 13.5);
@@ -557,7 +571,7 @@ if (typeof THREE === 'undefined') {
   function generateCars() {
     const roadPositions = [-30, -10, 10, 30];
     const carColors = [0xe84f4f, 0x4d81d8, 0xf2c94c, 0xe7ecef, 0x303841, 0x5eb07a];
-    const count = IS_MOBILE ? 8 : 16;
+    const count = IS_MOBILE ? 6 : 16;
     for (let i = 0; i < count; i++) {
       const horizontal = Math.random() < 0.5;
       const road = roadPositions[Math.floor(Math.random() * roadPositions.length)];
@@ -811,14 +825,41 @@ if (typeof THREE === 'undefined') {
   }
 
   function startRound() {
-    resetRound();
-    state.running = true;
-    state.startTime = performance.now();
-    state.nextWindChange = performance.now() + rand(2600, 5000);
-    state.nextCrowSpawn = performance.now() + rand(3000, 6000);
-    startOverlay.classList.remove('show');
-    resultOverlay.classList.remove('show');
-    showToast(`目的地已標在小地圖：${(target && target.type) === 'road' ? '馬路投送' : '屋頂投送'}`);
+    if (state.loading) return;
+    state.loading = true;
+    startBtn.disabled = true;
+    replayBtn.disabled = true;
+    const oldStartText = startBtn.textContent;
+    const oldReplayText = replayBtn.textContent;
+    startBtn.textContent = '載入城市…';
+    replayBtn.textContent = '載入城市…';
+
+    // 先讓手機瀏覽器把按鈕狀態畫出來，再建立 3D 城市，避免看起來像完全沒點到。
+    requestAnimationFrame(function() {
+      setTimeout(function() {
+        try {
+          resetRound();
+          state.running = true;
+          state.startTime = performance.now();
+          state.nextWindChange = performance.now() + rand(2600, 5000);
+          state.nextCrowSpawn = performance.now() + rand(3000, 6000);
+          startOverlay.classList.remove('show');
+          resultOverlay.classList.remove('show');
+          showToast(`目的地已標在小地圖：${(target && target.type) === 'road' ? '馬路投送' : '屋頂投送'}`);
+        } catch (err) {
+          console.error(err);
+          startOverlay.classList.add('show');
+          const p = startOverlay.querySelector('.modal p:not(.eyebrow)');
+          if (p) p.textContent = '手機建立 3D 畫面時發生錯誤，請重新整理後再試。若仍無法進入，請改用 Safari 或 Chrome 開啟。';
+        } finally {
+          state.loading = false;
+          startBtn.disabled = false;
+          replayBtn.disabled = false;
+          startBtn.textContent = oldStartText;
+          replayBtn.textContent = oldReplayText;
+        }
+      }, 30);
+    });
   }
 
   function attachKey() {
@@ -956,44 +997,3 @@ if (typeof THREE === 'undefined') {
     key.group.position.addScaledVector(state.keyVelocity, dt);
     key.group.rotation.x += dt * 4.5;
     key.group.rotation.z += dt * 2.4;
-
-    // 屋頂投送點：鑰匙碰到指定大樓屋頂時判定是否進圈。
-    if ((target && target.type) === 'roof') {
-      const b = target.building;
-      const insideTargetBuilding = Math.abs(key.group.position.x - b.x) <= b.w/2 && Math.abs(key.group.position.z - b.z) <= b.d/2;
-      if (insideTargetBuilding && key.group.position.y <= target.y + .15 && state.keyVelocity.y < 0) {
-        const dist = Math.hypot(key.group.position.x - target.x, key.group.position.z - target.z);
-        key.group.position.y = target.y + .16;
-        state.keyVelocity.set(0,0,0);
-        if (dist <= TARGET_RADIUS * .9) finish(true);
-        else finish(false, '鑰匙落在屋頂，但沒有進入指定圓圈');
-        return;
-      }
-    }
-
-    // 落到非目標大樓。
-    for (const b of buildings) {
-      if ((target && target.type) === 'roof' && b === target.building) continue;
-      if (Math.abs(key.group.position.x - b.x) <= b.w/2 && Math.abs(key.group.position.z - b.z) <= b.d/2 && key.group.position.y <= b.roofY + .12 && state.keyVelocity.y < 0) {
-        finish(false, '鑰匙投錯大樓');
-        return;
-      }
-    }
-
-    // 馬路／地面投送點：掉到地面時再判定是否在圓圈內。
-    if (key.group.position.y <= .18) {
-      key.group.position.y = .18;
-      state.keyVelocity.set(0,0,0);
-      const dist = target ? Math.hypot(key.group.position.x - target.x, key.group.position.z - target.z) : Infinity;
-      if ((target && target.type) === 'road' && dist <= TARGET_RADIUS * .9) finish(true);
-      else finish(false, (target && target.type) === 'road' ? '鑰匙落到馬路，但沒有進入指定圓圈' : '鑰匙掉到地面，投送失敗');
-    }
-  }
-
-  function updateRecipient(t) {
-    if (!recipient) return;
-    const jump = Math.max(0, Math.sin(t * 4.2)) * .38;
-    recipient.group.position.y = recipient.baseY + jump;
-    recipient.armR.rotation.z = -1.15 + Math.sin(t * 7.2) * .75;
-    recipient.armR.rotation.x = Math.sin(t * 4.8) * .35;
-  }
