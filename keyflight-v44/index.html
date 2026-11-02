@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>送鑰匙大挑戰</title>
+  <style>
+:root {
+  color-scheme: dark;
+  --panel: rgba(10, 16, 31, .72);
+  --line: rgba(255,255,255,.12);
+  --text: #f7fbff;
+  --muted: #9eb1c8;
+  --accent: #ffb84d;
+  --danger: #ff5a67;
+  --ok: #7be495;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #98c4eb; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif; touch-action: none; }
+button { font: inherit; touch-action: manipulation; }
+.joystick-base, .throttle-track { touch-action: none; }
+#game, #game canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#hud { position: fixed; z-index: 20; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: none; }
+.hud-card { min-width: 112px; padding: 9px 12px; border: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(12px); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.14); }
+.hud-label { display: block; font-size: 10px; letter-spacing: .08em; color: var(--muted); margin-bottom: 2px; }
+.hud-card strong { font-size: 17px; color: var(--text); }
+.wind-line { display: flex; align-items: center; gap: 8px; }
+#windArrow { display: inline-block; font-size: 21px; transition: transform .25s ease; color: #a9d9ff; }
+#minimap { position: fixed; z-index: 20; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: 142px; height: 142px; border-radius: 18px; border: 1px solid rgba(255,255,255,.18); background: rgba(8, 14, 28, .76); box-shadow: 0 8px 30px rgba(0,0,0,.2); }
+#controls { position: fixed; z-index: 30; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; padding: 0 max(18px, env(safe-area-inset-left)) 0 max(18px, env(safe-area-inset-right)); pointer-events: none; }
+.control-zone, .actions { pointer-events: auto; }
+.control-zone { display: flex; flex-direction: column; align-items: center; gap: 7px; color: rgba(255,255,255,.72); font-size: 11px; user-select: none; }
+.joystick-zone { justify-self: start; }
+.throttle-zone { justify-self: end; }
+.joystick-base { position: relative; width: 128px; height: 128px; border-radius: 50%; border: 1px solid rgba(255,255,255,.22); background: rgba(6, 12, 24, .36); box-shadow: inset 0 0 0 14px rgba(255,255,255,.025), 0 8px 28px rgba(0,0,0,.18); }
+.joystick-base::before, .joystick-base::after { content: ""; position: absolute; background: rgba(255,255,255,.08); }
+.joystick-base::before { left: 50%; top: 12%; bottom: 12%; width: 1px; }
+.joystick-base::after { top: 50%; left: 12%; right: 12%; height: 1px; }
+.joystick-knob { position: absolute; width: 58px; height: 58px; left: 35px; top: 35px; border-radius: 50%; background: rgba(255,255,255,.92); border: 6px solid rgba(0,0,0,.08); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.throttle-track { position: relative; width: 64px; height: 150px; border-radius: 32px; border: 1px solid rgba(255,255,255,.22); background: rgba(6, 12, 24, .36); box-shadow: inset 0 0 0 10px rgba(255,255,255,.025), 0 8px 28px rgba(0,0,0,.18); }
+.throttle-track::after { content: ""; position: absolute; left: 10px; right: 10px; top: 50%; height: 1px; background: rgba(255,255,255,.1); }
+.throttle-knob { position: absolute; width: 52px; height: 52px; left: 5px; top: 49px; border-radius: 18px; background: rgba(255,255,255,.92); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.actions { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 18px 10px; }
+.actions button, .modal button { border: 0; cursor: pointer; color: #10131a; font-weight: 800; box-shadow: 0 8px 22px rgba(0,0,0,.2); }
+.drop-btn { min-width: 142px; padding: 16px 20px; border-radius: 18px; background: linear-gradient(180deg, #ffd16d, #ffad33); font-size: 16px; }
+.drop-btn:disabled { opacity: .45; }
+.minor-btn { padding: 9px 14px; border-radius: 999px; background: rgba(255,255,255,.86); font-size: 12px; }
+.overlay { position: fixed; z-index: 60; inset: 0; display: none; place-items: center; padding: 24px; background: rgba(4, 9, 20, .62); backdrop-filter: blur(10px); }
+.overlay.show { display: grid; }
+.modal { width: min(440px, 92vw); border: 1px solid rgba(255,255,255,.14); background: linear-gradient(180deg, rgba(16,25,45,.97), rgba(8,15,29,.97)); border-radius: 26px; padding: 28px; text-align: center; box-shadow: 0 22px 60px rgba(0,0,0,.35); }
+.eyebrow { color: #8dc9ff; font-weight: 800; letter-spacing: .14em; font-size: 11px; margin: 0 0 8px; }
+.modal h1, .modal h2 { margin: 4px 0 10px; color: #fff; }
+.modal p { color: #b6c4d6; line-height: 1.65; margin: 0 0 18px; }
+.modal button { min-width: 180px; padding: 14px 22px; border-radius: 16px; background: linear-gradient(180deg, #ffd16d, #ffad33); }
+.grade-guide { display: flex; justify-content: center; flex-wrap: wrap; gap: 7px; margin: 0 0 20px; }
+.grade-guide span { padding: 7px 10px; border-radius: 999px; background: rgba(255,255,255,.06); color: #d9e4f1; font-size: 12px; }
+.grade { font-size: 82px; line-height: .95; font-weight: 950; color: var(--accent); text-shadow: 0 10px 30px rgba(255,184,77,.2); margin: 8px 0 14px; }
+#toast { position: fixed; z-index: 50; left: 50%; bottom: 190px; transform: translateX(-50%) translateY(12px); opacity: 0; padding: 10px 15px; border-radius: 999px; background: rgba(5, 10, 20, .82); color: white; font-size: 13px; pointer-events: none; transition: .2s ease; }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.desktop-move-hint { display: flex; flex-direction: column; align-items: center; gap: 8px; color: rgba(255,255,255,.88); }
+.wasd-grid { display: grid; grid-template-columns: repeat(3, 42px); grid-template-rows: repeat(2, 42px); gap: 5px; }
+.keycap { display: grid; place-items: center; border: 1px solid rgba(255,255,255,.22); border-bottom-width: 3px; border-radius: 10px; background: rgba(6,12,24,.56); font-weight: 800; color: #fff; box-shadow: 0 7px 18px rgba(0,0,0,.16); }
+.keycap.w { grid-column: 2; }
+.keycap.a { grid-column: 1; grid-row: 2; }
+.keycap.s { grid-column: 2; grid-row: 2; }
+.keycap.d { grid-column: 3; grid-row: 2; }
+.mobile-only { display: none; }
+.desktop-only { display: flex; }
+
+@media (max-width: 760px) {
+  .mobile-only { display: flex; }
+  .desktop-only { display: none; }
+  #hud { left: 10px; right: 10px; transform: none; justify-content: flex-start; }
+  .hud-card { min-width: 88px; padding: 7px 9px; }
+  .hud-card strong { font-size: 14px; }
+  #minimap { width: 104px; height: 104px; top: 76px; }
+  .joystick-base { width: 112px; height: 112px; }
+  .joystick-knob { width: 52px; height: 52px; left: 29px; top: 29px; }
+  .throttle-track { height: 132px; }
+  .throttle-knob { top: 40px; }
+  .actions { padding-inline: 10px; }
+  .drop-btn { min-width: 116px; padding: 14px 12px; }
+}
+@media (orientation: portrait) and (max-width: 760px) {
+  #controls { grid-template-columns: 1fr 1fr; }
+  .actions { position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%); }
+  #minimap { top: 74px; }
+}
+
+</style>
+</head>
+<body>
+  <div id="game"></div>
+
+  <div id="hud">
+    <div class="hud-card timer-card">
+      <span class="hud-label">剩餘時間</span>
+      <strong id="timer">60.0</strong>
+    </div>
+    <div class="hud-card wind-card">
+      <span class="hud-label">風向 / 風力</span>
+      <div class="wind-line"><span id="windArrow">↑</span><strong id="windText">0.0 m/s</strong></div>
+    </div>
+    <div class="hud-card altitude-card">
+      <span class="hud-label">高度</span>
+      <strong id="altitude">0.0 m</strong>
+    </div>
+  </div>
+
+  <canvas id="minimap" width="180" height="180" aria-label="小地圖"></canvas>
+
+  <div id="controls">
+    <div class="control-zone joystick-zone mobile-only">
+      <div id="joystickBase" class="joystick-base">
+        <div id="joystickKnob" class="joystick-knob"></div>
+      </div>
+      <span>方向搖桿</span>
+    </div>
+
+    <div class="control-zone joystick-zone desktop-only">
+      <div class="desktop-move-hint">
+        <div class="wasd-grid">
+          <div class="keycap w">W</div><div class="keycap a">A</div><div class="keycap s">S</div><div class="keycap d">D</div>
+        </div>
+        <span>前進 / 左 / 後退 / 右</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="dropBtn" class="drop-btn" type="button">放下鑰匙</button>
+      <span class="desktop-only" style="font-size:11px;color:rgba(255,255,255,.72)">空白鍵也可投放</span>
+    </div>
+
+    <div class="control-zone throttle-zone">
+      <div id="throttleTrack" class="throttle-track" title="滑鼠上下拖曳控制升降">
+        <div id="throttleKnob" class="throttle-knob"></div>
+      </div>
+      <span class="desktop-only">滑鼠拖曳升降</span>
+      <span class="mobile-only">高度</span>
+    </div>
+  </div>
+
+  <div id="startOverlay" class="overlay show">
+    <div class="modal">
+      <p class="eyebrow">KEY DELIVERY CHALLENGE</p>
+      <h1>送鑰匙大挑戰</h1>
+      <p>60 秒內，把鑰匙送進指定圓圈；目的地可能在大樓屋頂，也可能直接出現在馬路上。固定約 80° 近垂直俯視鏡頭會跟隨無人機，小地圖標記唯一目的地；途中還要對抗隨機側風、車流與最多兩隻會主動攻擊的烏鴉。烏鴉第一次逼近時，無人機會自動釋放一次球型聲波嚇退牠們，之後 10 秒內不會再遭到烏鴉攻擊；聲波整局只能使用一次。</p>
+      <div class="grade-guide"><span>S ≤ 30秒</span><span>A 31–60秒</span></div>
+      <button id="startBtn" type="button">開始任務</button>
+    </div>
+  </div>
+
+  <div id="resultOverlay" class="overlay">
+    <div class="modal result-modal">
+      <p id="resultEyebrow" class="eyebrow">MISSION COMPLETE</p>
+      <div id="grade" class="grade">S</div>
+      <h2 id="resultTitle">投送成功</h2>
+      <p id="resultText">完成時間 8.4 秒</p>
+      <button id="replayBtn" type="button">再玩一次</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script>
+if (typeof THREE === 'undefined') {
+  document.body.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;padding:28px;background:#0b1020;color:white;font-family:system-ui;text-align:center"><div><h2>遊戲引擎載入失敗</h2><p style="color:#b7c5d8;line-height:1.6">請確認手機有網路連線後重新整理。建議使用最新版 Chrome 或 Safari。</p></div></div>';
+  throw new Error('THREE failed to load');
+}
+(() => {
+  'use strict';
+
+  const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  const MOBILE_DPR = 1.0;
+
+  const WORLD = 84;
+  const ROAD = 6;
+  const BLOCK = 14;
+  const TARGET_RADIUS = 2.2;
+  const DRONE_RADIUS = 0.85;
+  const MAX_ALT = 34;
+  const MIN_ALT = 0.9;
+
+  const gameEl = document.getElementById('game');
+  const timerEl = document.getElementById('timer');
+  const altitudeEl = document.getElementById('altitude');
+  const windTextEl = document.getElementById('windText');
+  const windArrowEl = document.getElementById('windArrow');
+  const minimap = document.getElementById('minimap');
+  const mini = minimap.getContext('2d');
+  const startOverlay = document.getElementById('startOverlay');
+  const resultOverlay = document.getElementById('resultOverlay');
+  const startBtn = document.getElementById('startBtn');
+  const replayBtn = document.getElementById('replayBtn');
+  const dropBtn = document.getElementById('dropBtn');
+  const resultEyebrow = document.getElementById('resultEyebrow');
+  const gradeEl = document.getElementById('grade');
+  const resultTitle = document.getElementById('resultTitle');
+  const resultText = document.getElementById('resultText');
+  const toast = document.getElementById('toast');
+  const joystickBase = document.getElementById('joystickBase');
+  const joystickKnob = document.getElementById('joystickKnob');
+  const throttleTrack = document.getElementById('throttleTrack');
+  const throttleKnob = document.getElementById('throttleKnob');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x9fc8eb);
+  scene.fog = new THREE.Fog(0x9fc8eb, 55, 135);
+
+  const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 220);
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: !IS_MOBILE, powerPreference: IS_MOBILE ? 'default' : 'high-performance' });
+  } catch (err) {
+    renderer = new THREE.WebGLRenderer({ antialias: false });
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, IS_MOBILE ? MOBILE_DPR : 1.7));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = !IS_MOBILE;
+  if (!IS_MOBILE) renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  gameEl.appendChild(renderer.domElement);
+
+  scene.add(new THREE.HemisphereLight(0xeef7ff, 0x5f6877, 2.2));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+  sun.position.set(-28, 55, 25);
+  sun.castShadow = !IS_MOBILE;
+  if (!IS_MOBILE) {
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.left = -60;
+    sun.shadow.camera.right = 60;
+    sun.shadow.camera.top = 60;
+    sun.shadow.camera.bottom = -60;
+  }
+  scene.add(sun);
+
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0xaab39f, roughness: 1 });
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x2d3540, roughness: 1 });
+  const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0xbfc3bf, roughness: 1 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf5f4ee, roughness: 0.9 });
+
+  let cityGroup = new THREE.Group();
+  let roadGroup = new THREE.Group();
+  let carGroup = new THREE.Group();
+  let crowGroup = new THREE.Group();
+  let effectGroup = new THREE.Group();
+  scene.add(cityGroup, roadGroup, carGroup, crowGroup, effectGroup);
+
+  let buildings = [];
+  let cars = [];
+  let crows = [];
+  let target = null;
+  let recipient = null;
+  let targetRing = null;
+
+  const drone = createDrone();
+  scene.add(drone.group);
+
+  const key = createKey();
+  scene.add(key.group);
+
+  const state = {
+    running: false,
+    finished: false,
+    startTime: 0,
+    elapsed: 0,
+    timeLeft: 60,
+    dropped: false,
+    keyVelocity: new THREE.Vector3(),
+    velocity: new THREE.Vector3(),
+    input: new THREE.Vector2(),
+    throttle: 0,
+    wind: new THREE.Vector3(),
+    nextWindChange: 0,
+    windStrength: 0,
+    toastTimer: 0,
+    crashing: false,
+    crashReason: '',
+    nextCrowSpawn: 0,
+    soundDefenseUsed: false,
+    crowSafeUntil: 0,
+    soundWaveActive: false,
+    soundWaveStart: 0,
+  };
+
+  function createDrone() {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(1.6, 0.55, 1.2),
+      new THREE.MeshStandardMaterial({ color: 0xf29b38, roughness: 0.42, metalness: 0.12 })
+    );
+    body.castShadow = true;
+    group.add(body);
+
+    // 無人機機身上方 ULOCK 標誌。使用 CanvasTexture，手機與桌機皆不需額外字型檔。
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 512;
+    labelCanvas.height = 160;
+    const labelCtx = labelCanvas.getContext('2d');
+    labelCtx.clearRect(0, 0, labelCanvas.width, labelCanvas.height);
+    labelCtx.fillStyle = 'rgba(255,255,255,0.96)';
+    labelCtx.fillRect(10, 10, 492, 140);
+    labelCtx.fillStyle = '#161b22';
+    labelCtx.font = 'bold 92px Arial, sans-serif';
+    labelCtx.textAlign = 'center';
+    labelCtx.textBaseline = 'middle';
+    labelCtx.fillText('ULOCK', 256, 82);
+    const labelTexture = new THREE.CanvasTexture(labelCanvas);
+    labelTexture.minFilter = THREE.LinearFilter;
+    const label = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.36, 0.43),
+      new THREE.MeshBasicMaterial({ map: labelTexture, transparent: true, side: THREE.DoubleSide, depthWrite: false })
+    );
+    label.rotation.x = -Math.PI / 2;
+    label.position.set(0, 0.286, 0);
+    label.renderOrder = 3;
+    group.add(label);
+
+    const armMat = new THREE.MeshStandardMaterial({ color: 0x323a45, roughness: 0.55 });
+    const rotorMat = new THREE.MeshStandardMaterial({ color: 0x111820, roughness: 0.35 });
+    const hubMat = new THREE.MeshStandardMaterial({ color: 0xe4e8ed, metalness: 0.55, roughness: 0.25 });
+    const propellers = [];
+    const coords = [[-1.12,-0.92],[1.12,-0.92],[-1.12,0.92],[1.12,0.92]];
+
+    coords.forEach(([x,z]) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.12, 0.13), armMat);
+      arm.position.set(x * 0.48, 0.02, z * 0.48);
+      arm.rotation.y = Math.atan2(z, x);
+      group.add(arm);
+
+      const rotor = new THREE.Group();
+      rotor.position.set(x, 0.18, z);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.13, 12), hubMat);
+      hub.rotation.x = Math.PI / 2;
+      rotor.add(hub);
+      const blade1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.035, 0.11), rotorMat);
+      const blade2 = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 1.2), rotorMat);
+      rotor.add(blade1, blade2);
+      group.add(rotor);
+      propellers.push(rotor);
+    });
+
+    const hook = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x4c5664 }));
+    hook.position.y = -0.66;
+    group.add(hook);
+
+    group.position.set(-34, 5.5, 34);
+    return { group, propellers };
+  }
+
+  function createKey() {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xe7c05a, metalness: 0.8, roughness: 0.24 });
+    const head = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.07, 8, 20), mat);
+    head.rotation.x = Math.PI / 2;
+    head.castShadow = true;
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.55, 0.08), mat);
+    shaft.position.y = -0.32;
+    shaft.castShadow = true;
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.08), mat);
+    tooth.position.set(0.06, -0.58, 0);
+    tooth.castShadow = true;
+    group.add(head, shaft, tooth);
+    return { group };
+  }
+
+  function clearGroup(group, disposeMaterials = true) {
+    while (group.children.length) {
+      const obj = group.children.pop();
+      if (obj.traverse) obj.traverse(function(child) {
+        if (child.geometry && child.geometry.dispose) child.geometry.dispose();
+        if (disposeMaterials && child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(function(m) { if (m && m.dispose) m.dispose(); });
+          else if (child.material.dispose) child.material.dispose();
+        }
+      });
+    }
+  }
+
+  function addGroundAndRoads() {
+    clearGroup(roadGroup, false);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD + 20, WORLD + 20), groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    roadGroup.add(ground);
+
+    const roadPositions = [-30, -10, 10, 30];
+    for (const p of roadPositions) {
+      const hRoad = new THREE.Mesh(new THREE.BoxGeometry(WORLD, 0.08, ROAD), roadMat);
+      hRoad.position.set(0, 0.045, p);
+      hRoad.receiveShadow = true;
+      roadGroup.add(hRoad);
+      const vRoad = new THREE.Mesh(new THREE.BoxGeometry(ROAD, 0.08, WORLD), roadMat);
+      vRoad.position.set(p, 0.05, 0);
+      vRoad.receiveShadow = true;
+      roadGroup.add(vRoad);
+
+      for (let i = -36; i <= 36; i += 8) {
+        const mark1 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.015, 0.12), whiteMat);
+        mark1.position.set(i, 0.095, p);
+        roadGroup.add(mark1);
+        const mark2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.015, 2.4), whiteMat);
+        mark2.position.set(p, 0.1, i);
+        roadGroup.add(mark2);
+      }
+    }
+  }
+
+  function makeBuilding(x, z, w, d, h, color) {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.86 });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    mesh.position.y = h / 2;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.16, 0.22, d + 0.16), new THREE.MeshStandardMaterial({ color: 0xd6d2c9, roughness: 0.95 }));
+    roof.position.y = h + 0.11;
+    roof.receiveShadow = true;
+    group.add(roof);
+
+    const windowMat = new THREE.MeshStandardMaterial({ color: 0x8cb8cc, roughness: 0.25, metalness: 0.05 });
+    const rawLevels = Math.max(2, Math.floor(h / 3.2));
+    const levels = IS_MOBILE ? Math.min(4, rawLevels) : rawLevels;
+    const levelStep = IS_MOBILE && rawLevels > levels ? (rawLevels / levels) : 1;
+    for (let li = 0; li < levels; li++) {
+      const ly = Math.floor(li * levelStep);
+      const y = 1.7 + ly * 3.1;
+      [-1, 1].forEach(side => {
+        const front = new THREE.Mesh(new THREE.BoxGeometry(Math.max(1.2, w * 0.22), 1.1, 0.06), windowMat);
+        front.position.set(side * w * 0.23, y, d / 2 + 0.032);
+        group.add(front);
+        const back = front.clone(); back.position.z = -d / 2 - 0.032; group.add(back);
+        const left = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.1, Math.max(1.2, d * 0.22)), windowMat);
+        left.position.set(w / 2 + 0.032, y, side * d * 0.23); group.add(left);
+        const right = left.clone(); right.position.x = -w / 2 - 0.032; group.add(right);
+      });
+    }
+
+    group.position.set(x, 0, z);
+    cityGroup.add(group);
+    const info = { group, x, z, w, d, h, roofY: h + 0.23 };
+    buildings.push(info);
+    return info;
+  }
+
+  function generateCity() {
+    clearGroup(cityGroup);
+    clearGroup(carGroup);
+    clearGroup(crowGroup);
+    clearGroup(effectGroup);
+    buildings = [];
+    cars = [];
+    crows = [];
+    target = null;
+    recipient = null;
+    targetRing = null;
+
+    addGroundAndRoads();
+
+    const centers = [-38, -20, 0, 20, 38];
+    const roadCenters = [-30, -10, 10, 30];
+    const palette = [0xc5b8a4, 0x9faeae, 0xd2c7b6, 0xa8b2c1, 0xb7a7a4, 0xc9c2b5, 0x96a5b4];
+
+    for (let xi = 0; xi < centers.length; xi++) {
+      for (let zi = 0; zi < centers.length; zi++) {
+        const cx = centers[xi], cz = centers[zi];
+        const nearRoadX = roadCenters.some(r => Math.abs(cx - r) < 7);
+        const nearRoadZ = roadCenters.some(r => Math.abs(cz - r) < 7);
+        if (nearRoadX || nearRoadZ) continue;
+
+        const count = Math.random() < 0.25 ? 2 : 1;
+        for (let n = 0; n < count; n++) {
+          const w = rand(8.5, count === 2 ? 10.5 : 13.5);
+          const d = rand(8.5, count === 2 ? 10.5 : 13.5);
+          const h = rand(8, 28);
+          const ox = count === 2 ? (n === 0 ? -4.2 : 4.2) : 0;
+          const oz = count === 2 ? rand(-2.2, 2.2) : 0;
+          makeBuilding(cx + ox, cz + oz, w, d, h, palette[Math.floor(Math.random() * palette.length)]);
+        }
+      }
+    }
+
+    // 每局只有一個投送點：50% 屋頂、50% 馬路。
+    if (Math.random() < 0.5) createRandomRoadTarget();
+    else {
+      const candidates = buildings.filter(b => b.w >= 9 && b.d >= 9 && b.x > -22 && b.z < 25);
+      const b = candidates[Math.floor(Math.random() * candidates.length)] || buildings[Math.floor(buildings.length / 2)];
+      createTargetOnRoof(b);
+    }
+    generateCars();
+  }
+
+  function makeTargetRing(x, y, z) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(TARGET_RADIUS * 0.72, TARGET_RADIUS, 40),
+      new THREE.MeshStandardMaterial({ color: 0xf1f1ed, side: THREE.DoubleSide, roughness: 1 })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y, z);
+    cityGroup.add(ring);
+    targetRing = ring;
+  }
+
+  function createTargetOnRoof(b) {
+    target = { type: 'roof', x: b.x, z: b.z, y: b.roofY, building: b };
+    makeTargetRing(target.x, target.y + 0.025, target.z);
+
+    const person = createRecipient();
+    person.baseY = b.roofY + 0.2;
+    person.group.position.set(b.x + Math.min(b.w * 0.3, 3.2), person.baseY, b.z + Math.min(b.d * 0.25, 2.5));
+    cityGroup.add(person.group);
+    recipient = person;
+  }
+
+  function createRandomRoadTarget() {
+    const roadPositions = [-30, -10, 10, 30];
+    const horizontal = Math.random() < 0.5;
+    const road = roadPositions[Math.floor(Math.random() * roadPositions.length)];
+    const safeSegments = [-38, -20, 0, 20, 38];
+    let along = safeSegments[Math.floor(Math.random() * safeSegments.length)] + rand(-3.0, 3.0);
+    // 避開出生點附近，避免任務太簡單。
+    if (horizontal && Math.hypot(along + 30, road - 30) < 18) along = rand(-5, 25);
+    if (!horizontal && Math.hypot(road + 30, along - 30) < 18) along = rand(-25, 5);
+
+    const x = horizontal ? along : road;
+    const z = horizontal ? road : along;
+    target = { type: 'road', x, z, y: 0.11, horizontal };
+    makeTargetRing(x, 0.115, z);
+
+    const person = createRecipient();
+    const side = Math.random() < 0.5 ? -1 : 1;
+    person.baseY = 0.2;
+    if (horizontal) person.group.position.set(x + 2.5, person.baseY, z + side * (ROAD/2 + 1.2));
+    else person.group.position.set(x + side * (ROAD/2 + 1.2), person.baseY, z + 2.5);
+    cityGroup.add(person.group);
+    recipient = person;
+  }
+
+  function createRecipient() {
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2d68c4, roughness: .7 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xf0c8a0, roughness: .82 });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x26313f, roughness: .85 });
+
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(.72, 1.15, .45), bodyMat); torso.position.y = 1.42; group.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(.35, 18, 14), skinMat); head.position.y = 2.33; group.add(head);
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(.22, .9, .25), pantsMat); legL.position.set(-.19, .55, 0); group.add(legL);
+    const legR = legL.clone(); legR.position.x = .19; group.add(legR);
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(.18, .85, .2), skinMat); armL.position.set(-.49, 1.55, 0); armL.rotation.z = -.22; group.add(armL);
+    const armR = new THREE.Mesh(new THREE.BoxGeometry(.18, .9, .2), skinMat); armR.geometry.translate(0, -.34, 0); armR.position.set(.48, 1.88, 0); armR.rotation.z = -1.2; group.add(armR);
+    return { group, armR, baseY: 0 };
+  }
+
+  function generateCars() {
+    const roadPositions = [-30, -10, 10, 30];
+    const carColors = [0xe84f4f, 0x4d81d8, 0xf2c94c, 0xe7ecef, 0x303841, 0x5eb07a];
+    const count = IS_MOBILE ? 8 : 16;
+    for (let i = 0; i < count; i++) {
+      const horizontal = Math.random() < 0.5;
+      const road = roadPositions[Math.floor(Math.random() * roadPositions.length)];
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const lane = (Math.random() < 0.5 ? -1 : 1) * 1.45;
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.45, .62, 2.5), new THREE.MeshStandardMaterial({ color: carColors[Math.floor(Math.random() * carColors.length)], roughness: .55 }));
+      body.position.y = .58; body.castShadow = true; group.add(body);
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.12, .48, 1.25), new THREE.MeshStandardMaterial({ color: 0xaed1e3, roughness: .25 }));
+      cabin.position.set(0, 1.02, -.12); cabin.castShadow = true; group.add(cabin);
+      let x, z;
+      if (horizontal) {
+        x = rand(-WORLD/2, WORLD/2); z = road + lane; group.rotation.y = dir > 0 ? Math.PI/2 : -Math.PI/2;
+      } else {
+        x = road + lane; z = rand(-WORLD/2, WORLD/2); group.rotation.y = dir > 0 ? 0 : Math.PI;
+      }
+      group.position.set(x, 0, z);
+      carGroup.add(group);
+      cars.push({ group, horizontal, dir, speed: rand(3.5, 6.8), radius: 1.55 });
+    }
+  }
+
+  function playScareSound() {
+    // 短促電子脈衝聲；若瀏覽器尚未允許音訊，會安靜略過，不影響遊戲。
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!playScareSound.ctx) playScareSound.ctx = new AudioCtx();
+      const ctx = playScareSound.ctx;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(160, now + 0.42);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.16, now + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.46);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now); osc.stop(now + 0.48);
+    } catch (e) {}
+  }
+
+  function triggerSoundDefense(now) {
+    if (state.soundDefenseUsed || state.finished || state.crashing) return;
+    state.soundDefenseUsed = true;
+    state.crowSafeUntil = now + 10000;
+    state.nextCrowSpawn = state.crowSafeUntil;
+    state.soundWaveActive = true;
+    state.soundWaveStart = now;
+
+    clearGroup(effectGroup);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x62d9ff,
+      transparent: true,
+      opacity: 0.34,
+      wireframe: true,
+      depthWrite: false
+    });
+    const wave = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), mat);
+    wave.position.copy(drone.group.position);
+    wave.userData.soundWave = true;
+    effectGroup.add(wave);
+
+    // 目前在場的烏鴉全部改成逃離狀態。
+    crows.forEach(function(c) {
+      c.fleeing = true;
+      c.fleeAge = 0;
+    });
+    playScareSound();
+    showToast('聲波防禦啟動！烏鴉被嚇退，10 秒內不會再攻擊');
+  }
+
+  function updateSoundWave(now) {
+    if (!state.soundWaveActive) return;
+    const wave = effectGroup.children[0];
+    if (!wave) { state.soundWaveActive = false; return; }
+    const age = (now - state.soundWaveStart) / 1000;
+    const scale = 1 + age * 11;
+    wave.scale.setScalar(scale);
+    wave.position.copy(drone.group.position);
+    if (wave.material) wave.material.opacity = Math.max(0, 0.34 * (1 - age / 1.05));
+    if (age >= 1.05) {
+      clearGroup(effectGroup);
+      state.soundWaveActive = false;
+    }
+  }
+
+  function createCrow() {
+    const group = new THREE.Group();
+    const black = new THREE.MeshStandardMaterial({ color: 0x111317, roughness: .8 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x252a31, roughness: .75 });
+    const beakMat = new THREE.MeshStandardMaterial({ color: 0xd9a12b, roughness: .7 });
+
+    const body = new THREE.Mesh(new THREE.SphereGeometry(.38, 12, 8), black);
+    body.scale.set(1.35, .72, .8); body.castShadow = true; group.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(.23, 10, 8), black);
+    head.position.set(0, .08, -.43); head.castShadow = true; group.add(head);
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(.09, .34, 6), beakMat);
+    beak.rotation.x = -Math.PI/2; beak.position.set(0, .07, -.68); group.add(beak);
+
+    const wingL = new THREE.Mesh(new THREE.BoxGeometry(.78, .055, .3), dark);
+    const wingR = wingL.clone();
+    wingL.position.set(-.48, .02, 0); wingR.position.set(.48, .02, 0);
+    wingL.rotation.z = .18; wingR.rotation.z = -.18;
+    group.add(wingL, wingR);
+    return { group, wingL, wingR, speed: rand(4.0, 5.2), age: 0, hitRadius: .72, fleeing: false, fleeAge: 0 };
+  }
+
+  function spawnCrow() {
+    if (!state.running || state.finished || state.crashing || performance.now() < state.crowSafeUntil || crows.length >= 2) return;
+    const crow = createCrow();
+    const edge = Math.floor(Math.random() * 4);
+    const margin = WORLD/2 + 8;
+    const p = drone.group.position;
+    let x = rand(-WORLD/2, WORLD/2), z = rand(-WORLD/2, WORLD/2);
+    if (edge === 0) x = -margin;
+    if (edge === 1) x = margin;
+    if (edge === 2) z = -margin;
+    if (edge === 3) z = margin;
+    crow.group.position.set(x, THREE.MathUtils.clamp(p.y + rand(-2.5, 3.5), 3, MAX_ALT), z);
+    crowGroup.add(crow.group);
+    crows.push(crow);
+    if (Math.random() < .55) showToast('注意：烏鴉正在接近！');
+  }
+
+  function updateCrows(dt, now) {
+    // 聲波防禦生效的 10 秒內不生成新的烏鴉。
+    if (state.running && !state.finished && !state.crashing && now >= state.crowSafeUntil && now >= state.nextCrowSpawn) {
+      spawnCrow();
+      state.nextCrowSpawn = now + rand(4200, 8500);
+    }
+
+    for (let i = crows.length - 1; i >= 0; i--) {
+      const c = crows[i];
+      c.age += dt;
+      const toDrone = drone.group.position.clone().sub(c.group.position);
+      const dist = toDrone.length();
+
+      // 第一次有烏鴉靠近警戒距離時，自動使用一次聲波防禦。
+      if (!state.soundDefenseUsed && !c.fleeing && state.running && !state.crashing && dist < 6.5) {
+        triggerSoundDefense(now);
+      }
+
+      if (c.fleeing || now < state.crowSafeUntil) {
+        // 被嚇退後，快速往遠離無人機的方向飛離城市。
+        c.fleeing = true;
+        c.fleeAge += dt;
+        const away = c.group.position.clone().sub(drone.group.position);
+        if (away.lengthSq() < 0.001) away.set(1, .25, 0);
+        away.normalize();
+        away.y = Math.max(away.y, 0.12);
+        away.normalize();
+        c.group.position.addScaledVector(away, 7.2 * dt);
+        c.group.lookAt(c.group.position.clone().add(away));
+      } else if (dist > .001) {
+        toDrone.normalize();
+        // 一般狀態：烏鴉持續修正方向追擊無人機。
+        c.group.position.addScaledVector(toDrone, c.speed * dt);
+        const lookAt = c.group.position.clone().add(toDrone);
+        c.group.lookAt(lookAt);
+      }
+
+      const flap = Math.sin(now * .018 + i) * .65;
+      c.wingL.rotation.z = .18 + flap;
+      c.wingR.rotation.z = -.18 - flap;
+
+      // 冷卻期間與逃離狀態不會造成碰撞。
+      if (!c.fleeing && now >= state.crowSafeUntil && !state.crashing && state.running && dist < c.hitRadius + DRONE_RADIUS) {
+        triggerCrowCrash();
+        return;
+      }
+      if (c.age > 18 || c.fleeAge > 3.2 || c.group.position.length() > WORLD * 1.15) {
+        crowGroup.remove(c.group);
+        crows.splice(i, 1);
+      }
+    }
+  }
+
+  function triggerCrowCrash() {
+    if (state.crashing || state.finished) return;
+    state.crashing = true;
+    state.crashReason = '無人機遭烏鴉撞擊，墜落地面';
+    state.velocity.x *= .45;
+    state.velocity.z *= .45;
+    state.velocity.y = Math.min(state.velocity.y, -1.5);
+    state.throttle = 0;
+    keyboardControl.throttle = 0;
+    dropBtn.disabled = true;
+    showToast('被烏鴉撞上！無人機失去升力');
+  }
+
+  function updateCrash(dt) {
+    if (!state.crashing) return;
+    state.velocity.y -= 11.5 * dt;
+    state.velocity.x *= Math.pow(.58, dt);
+    state.velocity.z *= Math.pow(.58, dt);
+    drone.group.position.addScaledVector(state.velocity, dt);
+    drone.group.rotation.x += dt * 2.3;
+    drone.group.rotation.z += dt * 3.1;
+    drone.propellers.forEach((p, i) => { p.rotation.y += dt * 5 * (i % 2 ? -1 : 1); });
+    altitudeEl.textContent = `${Math.max(0, drone.group.position.y).toFixed(1)} m`;
+    if (!state.dropped) attachKey();
+    if (drone.group.position.y <= MIN_ALT) {
+      drone.group.position.y = MIN_ALT;
+      finish(false, state.crashReason);
+    }
+  }
+
+  function randomizeWind(force = false) {
+    if (!force && performance.now() < state.nextWindChange) return;
+    const angle = Math.random() * Math.PI * 2;
+    const strength = rand(0.6, 3.1);
+    state.wind.set(Math.cos(angle) * strength, 0, Math.sin(angle) * strength);
+    state.windStrength = strength;
+    state.nextWindChange = performance.now() + rand(3000, 6200);
+    windTextEl.textContent = `${strength.toFixed(1)} m/s`;
+    const displayDeg = Math.atan2(state.wind.x, -state.wind.z) * 180 / Math.PI;
+    windArrowEl.style.transform = `rotate(${displayDeg}deg)`;
+    if (state.running) showToast(`側風改變：${strength.toFixed(1)} m/s`);
+  }
+
+  function resetRound() {
+    state.running = false;
+    state.finished = false;
+    state.elapsed = 0;
+    state.timeLeft = 60;
+    state.dropped = false;
+    state.velocity.set(0,0,0);
+    state.keyVelocity.set(0,0,0);
+    state.input.set(0,0);
+    state.throttle = 0;
+    state.crashing = false;
+    state.crashReason = '';
+    state.nextCrowSpawn = performance.now() + rand(3500, 6500);
+    state.soundDefenseUsed = false;
+    state.crowSafeUntil = 0;
+    state.soundWaveActive = false;
+    state.soundWaveStart = 0;
+    drone.group.position.set(-30, 7.5, 30);
+    drone.group.rotation.set(0,0,0);
+    key.group.visible = true;
+    attachKey();
+    dropBtn.disabled = false;
+    timerEl.textContent = '60.0';
+    altitudeEl.textContent = `${drone.group.position.y.toFixed(1)} m`;
+    generateCity();
+    randomizeWind(true);
+    centerControls();
+  }
+
+  function startRound() {
+    resetRound();
+    state.running = true;
+    state.startTime = performance.now();
+    state.nextWindChange = performance.now() + rand(2600, 5000);
+    state.nextCrowSpawn = performance.now() + rand(3000, 6000);
+    startOverlay.classList.remove('show');
+    resultOverlay.classList.remove('show');
+    showToast(`目的地已標在小地圖：${(target && target.type) === 'road' ? '馬路投送' : '屋頂投送'}`);
+  }
+
+  function attachKey() {
+    key.group.position.copy(drone.group.position).add(new THREE.Vector3(0, -1.25, 0));
+    key.group.rotation.set(0, 0, 0);
+  }
+
+  function dropKey() {
+    if (!state.running || state.finished || state.dropped || state.crashing) return;
+    state.dropped = true;
+    dropBtn.disabled = true;
+    state.keyVelocity.copy(state.velocity).multiplyScalar(.82);
+    state.keyVelocity.y -= 0.7;
+    showToast('鑰匙已投放');
+  }
+
+  function finish(success, reason = '') {
+    if (state.finished) return;
+    state.finished = true;
+    state.running = false;
+
+    if (success) {
+      const t = Math.min(state.elapsed, 60);
+      const grade = t <= 30 ? 'S' : 'A';
+      resultEyebrow.textContent = 'MISSION COMPLETE';
+      gradeEl.textContent = grade;
+      gradeEl.style.color = grade === 'S' ? '#ffd166' : '#8fe3ff';
+      resultTitle.textContent = '投送成功';
+      resultText.textContent = `完成時間 ${t.toFixed(1)} 秒`;
+    } else {
+      resultEyebrow.textContent = 'MISSION FAILED';
+      gradeEl.textContent = '×';
+      gradeEl.style.color = '#ff6574';
+      resultTitle.textContent = '任務失敗';
+      resultText.textContent = reason || '未完成投送';
+    }
+    resultOverlay.classList.add('show');
+  }
+
+  function updateDrone(dt) {
+    const accel = 10.8;
+    const drag = Math.pow(0.25, dt);
+    const windForce = 0.54;
+
+    const controlX = THREE.MathUtils.clamp(state.input.x + keyboardControl.input.x, -1, 1);
+    const controlZ = THREE.MathUtils.clamp(state.input.y + keyboardControl.input.y, -1, 1);
+    const controlThrottle = THREE.MathUtils.clamp(state.throttle + keyboardControl.throttle, -1, 1);
+
+    state.velocity.x += controlX * accel * dt;
+    state.velocity.z += controlZ * accel * dt;
+    state.velocity.x += state.wind.x * windForce * dt;
+    state.velocity.z += state.wind.z * windForce * dt;
+    state.velocity.y += controlThrottle * 10.2 * dt;
+
+    state.velocity.x *= drag;
+    state.velocity.z *= drag;
+    state.velocity.y *= Math.pow(0.12, dt);
+
+    const horizontalSpeed = Math.hypot(state.velocity.x, state.velocity.z);
+    const maxSpeed = 9.8;
+    if (horizontalSpeed > maxSpeed) {
+      const k = maxSpeed / horizontalSpeed;
+      state.velocity.x *= k; state.velocity.z *= k;
+    }
+    state.velocity.y = THREE.MathUtils.clamp(state.velocity.y, -5.2, 5.2);
+
+    drone.group.position.addScaledVector(state.velocity, dt);
+    drone.group.position.x = THREE.MathUtils.clamp(drone.group.position.x, -WORLD/2 + 2, WORLD/2 - 2);
+    drone.group.position.z = THREE.MathUtils.clamp(drone.group.position.z, -WORLD/2 + 2, WORLD/2 - 2);
+    drone.group.position.y = THREE.MathUtils.clamp(drone.group.position.y, MIN_ALT, MAX_ALT);
+
+    const tiltX = THREE.MathUtils.clamp(state.velocity.z * 0.028, -0.18, 0.18);
+    const tiltZ = THREE.MathUtils.clamp(-state.velocity.x * 0.028, -0.18, 0.18);
+    drone.group.rotation.x += (tiltX - drone.group.rotation.x) * Math.min(1, dt * 6);
+    drone.group.rotation.z += (tiltZ - drone.group.rotation.z) * Math.min(1, dt * 6);
+
+    drone.propellers.forEach((p, i) => { p.rotation.y += dt * (34 + i * 2) * (i % 2 ? -1 : 1); });
+    altitudeEl.textContent = `${drone.group.position.y.toFixed(1)} m`;
+
+    checkBuildingBlocking();
+    checkCarCollision();
+  }
+
+  function checkBuildingBlocking() {
+    // 讓大樓有實體感：撞牆時把無人機推回，不直接判失敗。
+    for (const b of buildings) {
+      const px = drone.group.position.x;
+      const pz = drone.group.position.z;
+      const py = drone.group.position.y;
+      const insideX = Math.abs(px - b.x) < b.w / 2 + DRONE_RADIUS;
+      const insideZ = Math.abs(pz - b.z) < b.d / 2 + DRONE_RADIUS;
+      const belowRoof = py < b.roofY + .55;
+      if (insideX && insideZ && belowRoof) {
+        const dx = px - b.x, dz = pz - b.z;
+        const penX = b.w/2 + DRONE_RADIUS - Math.abs(dx);
+        const penZ = b.d/2 + DRONE_RADIUS - Math.abs(dz);
+        if (penX < penZ) drone.group.position.x += (dx >= 0 ? 1 : -1) * (penX + .04);
+        else drone.group.position.z += (dz >= 0 ? 1 : -1) * (penZ + .04);
+        state.velocity.x *= .35; state.velocity.z *= .35;
+      }
+    }
+  }
+
+  function updateCars(dt) {
+    for (const c of cars) {
+      if (c.horizontal) c.group.position.x += c.dir * c.speed * dt;
+      else c.group.position.z += c.dir * c.speed * dt;
+      if (c.horizontal && c.group.position.x > WORLD/2 + 4) c.group.position.x = -WORLD/2 - 4;
+      if (c.horizontal && c.group.position.x < -WORLD/2 - 4) c.group.position.x = WORLD/2 + 4;
+      if (!c.horizontal && c.group.position.z > WORLD/2 + 4) c.group.position.z = -WORLD/2 - 4;
+      if (!c.horizontal && c.group.position.z < -WORLD/2 - 4) c.group.position.z = WORLD/2 + 4;
+    }
+  }
+
+  function checkCarCollision() {
+    if (!state.running || drone.group.position.y > 2.15) return;
+    for (const c of cars) {
+      const dx = drone.group.position.x - c.group.position.x;
+      const dz = drone.group.position.z - c.group.position.z;
+      if (Math.hypot(dx, dz) < c.radius + .72) {
+        finish(false, '無人機下降到馬路，被車輛撞上');
+        return;
+      }
+    }
+  }
+
+  function updateKey(dt) {
+    if (!state.dropped) {
+      attachKey();
+      key.group.rotation.z = Math.sin(performance.now() * .004) * .12;
+      return;
+    }
+
+    state.keyVelocity.y -= 9.8 * dt;
+    key.group.position.addScaledVector(state.keyVelocity, dt);
+    key.group.rotation.x += dt * 4.5;
+    key.group.rotation.z += dt * 2.4;
+
+    // 屋頂投送點：鑰匙碰到指定大樓屋頂時判定是否進圈。
+    if ((target && target.type) === 'roof') {
+      const b = target.building;
+      const insideTargetBuilding = Math.abs(key.group.position.x - b.x) <= b.w/2 && Math.abs(key.group.position.z - b.z) <= b.d/2;
+      if (insideTargetBuilding && key.group.position.y <= target.y + .15 && state.keyVelocity.y < 0) {
+        const dist = Math.hypot(key.group.position.x - target.x, key.group.position.z - target.z);
+        key.group.position.y = target.y + .16;
+        state.keyVelocity.set(0,0,0);
+        if (dist <= TARGET_RADIUS * .9) finish(true);
+        else finish(false, '鑰匙落在屋頂，但沒有進入指定圓圈');
+        return;
+      }
+    }
+
+    // 落到非目標大樓。
+    for (const b of buildings) {
+      if ((target && target.type) === 'roof' && b === target.building) continue;
+      if (Math.abs(key.group.position.x - b.x) <= b.w/2 && Math.abs(key.group.position.z - b.z) <= b.d/2 && key.group.position.y <= b.roofY + .12 && state.keyVelocity.y < 0) {
+        finish(false, '鑰匙投錯大樓');
+        return;
+      }
+    }
+
+    // 馬路／地面投送點：掉到地面時再判定是否在圓圈內。
+    if (key.group.position.y <= .18) {
+      key.group.position.y = .18;
+      state.keyVelocity.set(0,0,0);
+      const dist = target ? Math.hypot(key.group.position.x - target.x, key.group.position.z - target.z) : Infinity;
+      if ((target && target.type) === 'road' && dist <= TARGET_RADIUS * .9) finish(true);
+      else finish(false, (target && target.type) === 'road' ? '鑰匙落到馬路，但沒有進入指定圓圈' : '鑰匙掉到地面，投送失敗');
+    }
+  }
+
+  function updateRecipient(t) {
+    if (!recipient) return;
+    const jump = Math.max(0, Math.sin(t * 4.2)) * .38;
+    recipient.group.position.y = recipient.baseY + jump;
+    recipient.armR.rotation.z = -1.15 + Math.sin(t * 7.2) * .75;
+    recipient.armR.rotation.x = Math.sin(t * 4.8) * .35;
+  }
