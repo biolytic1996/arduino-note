@@ -997,3 +997,262 @@ if (typeof THREE === 'undefined') {
     key.group.position.addScaledVector(state.keyVelocity, dt);
     key.group.rotation.x += dt * 4.5;
     key.group.rotation.z += dt * 2.4;
+
+    // 屋頂投送點：鑰匙碰到指定大樓屋頂時判定是否進圈。
+    if ((target && target.type) === 'roof') {
+      const b = target.building;
+      const insideTargetBuilding = Math.abs(key.group.position.x - b.x) <= b.w/2 && Math.abs(key.group.position.z - b.z) <= b.d/2;
+      if (insideTargetBuilding && key.group.position.y <= target.y + .15 && state.keyVelocity.y < 0) {
+        const dist = Math.hypot(key.group.position.x - target.x, key.group.position.z - target.z);
+        key.group.position.y = target.y + .16;
+        state.keyVelocity.set(0,0,0);
+        if (dist <= TARGET_RADIUS * .9) finish(true);
+        else finish(false, '鑰匙落在屋頂，但沒有進入指定圓圈');
+        return;
+      }
+    }
+
+    // 落到非目標大樓。
+    for (const b of buildings) {
+      if ((target && target.type) === 'roof' && b === target.building) continue;
+      if (Math.abs(key.group.position.x - b.x) <= b.w/2 && Math.abs(key.group.position.z - b.z) <= b.d/2 && key.group.position.y <= b.roofY + .12 && state.keyVelocity.y < 0) {
+        finish(false, '鑰匙投錯大樓');
+        return;
+      }
+    }
+
+    // 馬路／地面投送點：掉到地面時再判定是否在圓圈內。
+    if (key.group.position.y <= .18) {
+      key.group.position.y = .18;
+      state.keyVelocity.set(0,0,0);
+      const dist = target ? Math.hypot(key.group.position.x - target.x, key.group.position.z - target.z) : Infinity;
+      if ((target && target.type) === 'road' && dist <= TARGET_RADIUS * .9) finish(true);
+      else finish(false, (target && target.type) === 'road' ? '鑰匙落到馬路，但沒有進入指定圓圈' : '鑰匙掉到地面，投送失敗');
+    }
+  }
+
+  function updateRecipient(t) {
+    if (!recipient) return;
+    const jump = Math.max(0, Math.sin(t * 4.2)) * .38;
+    recipient.group.position.y = recipient.baseY + jump;
+    recipient.armR.rotation.z = -1.15 + Math.sin(t * 7.2) * .75;
+    recipient.armR.rotation.x = Math.sin(t * 4.8) * .35;
+  }
+
+  function updateCamera(dt) {
+    // 固定約 80° 俯視跟隨：鏡頭幾乎在無人機正上方，只保留少量 +Z 偏移。
+    // 以垂直高度 20、水平距離約 3.53 計算，俯角約為 atan(20 / 3.53) ≈ 80°。
+    // 保留 +Z 偏移，讓 W 仍對應畫面前方（-Z），操作方向不改變。
+    const p = drone.group.position;
+    const verticalHeight = 20;
+    const horizontalOffset = 3.53;
+    const desired = new THREE.Vector3(p.x, p.y + verticalHeight, p.z + horizontalOffset);
+    const look = new THREE.Vector3(p.x, p.y, p.z);
+    camera.position.copy(desired);
+    camera.lookAt(look);
+  }
+
+  function drawMinimap() {
+    const w = minimap.width, h = minimap.height;
+    mini.clearRect(0,0,w,h);
+    mini.fillStyle = '#0b1322'; mini.fillRect(0,0,w,h);
+    const s = w / WORLD;
+    const tx = x => w/2 + x*s;
+    const tz = z => h/2 + z*s;
+
+    mini.strokeStyle = '#394554'; mini.lineWidth = ROAD * s;
+    [-30,-10,10,30].forEach(p => {
+      mini.beginPath(); mini.moveTo(0, tz(p)); mini.lineTo(w, tz(p)); mini.stroke();
+      mini.beginPath(); mini.moveTo(tx(p), 0); mini.lineTo(tx(p), h); mini.stroke();
+    });
+
+    mini.fillStyle = '#77828c';
+    buildings.forEach(b => mini.fillRect(tx(b.x - b.w/2), tz(b.z - b.d/2), b.w*s, b.d*s));
+
+    cars.forEach(c => {
+      mini.fillStyle = '#b6bec6';
+      mini.fillRect(tx(c.group.position.x)-2, tz(c.group.position.z)-2, 4, 4);
+    });
+
+    crows.forEach(c => {
+      mini.fillStyle = '#ff8a65';
+      mini.beginPath(); mini.arc(tx(c.group.position.x), tz(c.group.position.z), 2.6, 0, Math.PI*2); mini.fill();
+    });
+
+    if (target) {
+      // 只在地圖上標記目的地，不在 3D 世界用光柱／光暈提示。
+      mini.fillStyle = '#ff5f5f';
+      mini.beginPath(); mini.arc(tx(target.x), tz(target.z), 7, 0, Math.PI*2); mini.fill();
+      mini.strokeStyle = '#fff'; mini.lineWidth = 2; mini.stroke();
+      mini.fillStyle = '#fff'; mini.font = 'bold 10px sans-serif'; mini.fillText(target.type === 'road' ? 'ROAD' : 'ROOF', tx(target.x)+9, tz(target.z)+3);
+    }
+
+    mini.save();
+    mini.translate(tx(drone.group.position.x), tz(drone.group.position.z));
+    mini.fillStyle = '#55c9ff';
+    mini.beginPath(); mini.moveTo(0,-7); mini.lineTo(5,5); mini.lineTo(-5,5); mini.closePath(); mini.fill();
+    mini.restore();
+  }
+
+  function updateTimer(now) {
+    if (!state.running || state.finished || state.crashing) return;
+    state.elapsed = (now - state.startTime) / 1000;
+    state.timeLeft = Math.max(0, 60 - state.elapsed);
+    timerEl.textContent = state.timeLeft.toFixed(1);
+    if (state.timeLeft <= 10) timerEl.style.color = '#ff6b78';
+    else timerEl.style.color = '#fff';
+    if (state.elapsed >= 60) finish(false, '超過 60 秒，任務逾時');
+  }
+
+  function showToast(message) {
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(state.toastTimer);
+    state.toastTimer = setTimeout(() => toast.classList.remove('show'), 1400);
+  }
+
+  function rand(a,b) { return a + Math.random() * (b-a); }
+
+  function centerControls() {
+    joystickKnob.style.transform = 'translate(0px,0px)';
+    throttleKnob.style.transform = 'translateY(0px)';
+  }
+
+  function setupJoystick() {
+    let active = false, pointerId = null;
+    const maxR = 38;
+    function apply(clientX, clientY) {
+      const r = joystickBase.getBoundingClientRect();
+      let dx = clientX - (r.left + r.width/2);
+      let dy = clientY - (r.top + r.height/2);
+      const len = Math.hypot(dx,dy) || 1;
+      if (len > maxR) { dx *= maxR/len; dy *= maxR/len; }
+      joystickKnob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      state.input.set(dx/maxR, dy/maxR);
+    }
+    function reset() { active = false; pointerId = null; state.input.set(0,0); joystickKnob.style.transform = 'translate(0px,0px)'; }
+    if (window.PointerEvent) {
+      joystickBase.addEventListener('pointerdown', function(e) { active=true; pointerId=e.pointerId; if (joystickBase.setPointerCapture) joystickBase.setPointerCapture(e.pointerId); apply(e.clientX,e.clientY); e.preventDefault(); });
+      joystickBase.addEventListener('pointermove', function(e) { if (!active || e.pointerId !== pointerId) return; apply(e.clientX,e.clientY); e.preventDefault(); });
+      joystickBase.addEventListener('pointerup', function(e) { if (e.pointerId === pointerId) reset(); });
+      joystickBase.addEventListener('pointercancel', reset);
+    } else {
+      joystickBase.addEventListener('touchstart', function(e) { active=true; const t=e.changedTouches[0]; pointerId=t.identifier; apply(t.clientX,t.clientY); e.preventDefault(); }, {passive:false});
+      joystickBase.addEventListener('touchmove', function(e) { if(!active) return; for(let i=0;i<e.changedTouches.length;i++){ const t=e.changedTouches[i]; if(t.identifier===pointerId){apply(t.clientX,t.clientY);break;} } e.preventDefault(); }, {passive:false});
+      joystickBase.addEventListener('touchend', reset, {passive:false});
+      joystickBase.addEventListener('touchcancel', reset, {passive:false});
+    }
+  }
+
+  function setupThrottle() {
+    let active = false, pointerId = null;
+    const maxY = 45;
+    function apply(clientY) {
+      const r = throttleTrack.getBoundingClientRect();
+      let dy = clientY - (r.top + r.height/2);
+      dy = THREE.MathUtils.clamp(dy, -maxY, maxY);
+      throttleKnob.style.transform = 'translateY(' + dy + 'px)';
+      state.throttle = -dy/maxY;
+    }
+    function reset() { active=false; pointerId=null; state.throttle=0; throttleKnob.style.transform='translateY(0px)'; }
+    if (window.PointerEvent) {
+      throttleTrack.addEventListener('pointerdown', function(e) { active=true; pointerId=e.pointerId; if (throttleTrack.setPointerCapture) throttleTrack.setPointerCapture(e.pointerId); apply(e.clientY); e.preventDefault(); });
+      throttleTrack.addEventListener('pointermove', function(e) { if (!active || e.pointerId !== pointerId) return; apply(e.clientY); e.preventDefault(); });
+      throttleTrack.addEventListener('pointerup', function(e) { if (e.pointerId === pointerId) reset(); });
+      throttleTrack.addEventListener('pointercancel', reset);
+    } else {
+      throttleTrack.addEventListener('touchstart', function(e) { active=true; const t=e.changedTouches[0]; pointerId=t.identifier; apply(t.clientY); e.preventDefault(); }, {passive:false});
+      throttleTrack.addEventListener('touchmove', function(e) { if(!active) return; for(let i=0;i<e.changedTouches.length;i++){ const t=e.changedTouches[i]; if(t.identifier===pointerId){apply(t.clientY);break;} } e.preventDefault(); }, {passive:false});
+      throttleTrack.addEventListener('touchend', reset, {passive:false});
+      throttleTrack.addEventListener('touchcancel', reset, {passive:false});
+    }
+  }
+
+  const keys = new Set();
+  const keyboardControl = { input: new THREE.Vector2(), throttle: 0 };
+  addEventListener('keydown', e => {
+    keys.add(e.code);
+    if (e.code === 'Space') { e.preventDefault(); dropKey(); }
+  });
+  addEventListener('keyup', e => keys.delete(e.code));
+  function keyboardInput() {
+    let x = 0, z = 0;
+    if (state.running) {
+      if (keys.has('KeyA')) x -= 1;
+      if (keys.has('KeyD')) x += 1;
+      if (keys.has('KeyW')) z -= 1;
+      if (keys.has('KeyS')) z += 1;
+    }
+    keyboardControl.input.set(x, z);
+    if (x || z) keyboardControl.input.normalize();
+    // 電腦升降改由右側 BAR 的滑鼠拖曳控制；不再使用 Q / E。
+    keyboardControl.throttle = 0;
+  }
+
+  // 部分 iPhone / App 內建瀏覽器在全螢幕 WebGL 頁面會延遲或吞掉 click，
+  // 因此按鈕同時支援 touchend + click，並避免同一次觸控重複觸發。
+  function bindPress(el, handler) {
+    let lastTouch = 0;
+    el.addEventListener('touchend', function(e) {
+      lastTouch = Date.now();
+      e.preventDefault();
+      handler();
+    }, { passive: false });
+    el.addEventListener('click', function() {
+      if (Date.now() - lastTouch < 700) return;
+      handler();
+    });
+  }
+  bindPress(startBtn, startRound);
+  bindPress(replayBtn, startRound);
+  bindPress(dropBtn, dropKey);
+  setupJoystick();
+  setupThrottle();
+
+  addEventListener('resize', function() {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, IS_MOBILE ? MOBILE_DPR : 1.7));
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  let last = performance.now();
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = Math.min((now - last)/1000, .033);
+    last = now;
+
+    keyboardInput();
+    randomizeWind();
+    updateCars(dt);
+    updateCrows(dt, now);
+    updateSoundWave(now);
+    if (state.running && !state.finished) {
+      if (state.crashing) {
+        updateCrash(dt);
+      } else {
+        updateDrone(dt);
+        updateKey(dt);
+        updateTimer(now);
+      }
+    } else {
+      drone.propellers.forEach((p, i) => { p.rotation.y += dt * 10 * (i % 2 ? -1 : 1); });
+      if (!state.dropped) attachKey();
+    }
+    updateRecipient(now/1000);
+    updateCamera(dt);
+    drawMinimap();
+    renderer.render(scene, camera);
+  }
+
+  // 首頁先維持輕量狀態；城市在玩家按「開始任務」後才建立。
+  timerEl.textContent = '60.0';
+  altitudeEl.textContent = `${drone.group.position.y.toFixed(1)} m`;
+  attachKey();
+  camera.position.set(0, 25, 4.4);
+  animate(performance.now());
+})();
+
+</script>
+</body>
+</html>
